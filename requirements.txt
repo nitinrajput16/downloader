@@ -1,0 +1,6 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+yt-dlp>=2024.8.6
+python-multipart==0.0.9
+slowapi==0.1.9
+curl_cffi>=0.7.0

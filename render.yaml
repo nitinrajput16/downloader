@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: video-downloader
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
