@@ -435,6 +435,12 @@
         .btn-download:active { transform: translateY(0); }
         .btn-download:disabled { opacity: .45; cursor: not-allowed; transform: none; filter: none; box-shadow: none; }
         .btn-download svg { width: 20px; height: 20px; }
+        .btn-download.ready {
+            background: linear-gradient(135deg, var(--accent) 0%, #10b981 50%, var(--success) 100%);
+            box-shadow: 0 4px 16px var(--accent-glow);
+        }
+        .btn-download.ready:hover { box-shadow: 0 6px 20px var(--accent-glow); }
+
 
         /* ── How It Works ─────────────────────────────────── */
         .how-it-works { margin-top: 40px; text-align: center; }
@@ -687,7 +693,7 @@
                     <polyline points="7 10 12 15 17 10"/>
                     <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
-                Download Now
+                Process Video
             </button>
         </div>
     </div>
@@ -734,6 +740,7 @@
 // ── State ────────────────────────────────────────────────
 let videoData = null;
 let selectedFormatId = null;
+let downloadInfo = null;  // { download_id, filename, size }
 const $ = sel => document.querySelector(sel);
 
 // ── Helpers ──────────────────────────────────────────────
@@ -820,6 +827,19 @@ async function handleFetch() {
     $('#howSection').style.display = 'none';
     $('#fetchSpinner').classList.add('show');
     $('#fetchBtn').disabled = true;
+    
+    // Reset download state when fetching new video
+    downloadInfo = null;
+    const btn = $('#downloadBtn');
+    btn.classList.remove('ready');
+    btn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Process Video
+    `;
 
     try {
         const res = await fetch('/api/fetch', {
@@ -862,6 +882,18 @@ async function handleFetch() {
 // ── Download ────────────────────────────────────────────
 async function handleDownload() {
     if (!videoData) { showMsg('Fetch a video first.'); return; }
+    
+    // If file is already ready, trigger browser download
+    if (downloadInfo) {
+        triggerBrowserDownload();
+        return;
+    }
+    
+    // Phase 1: Process video on server
+    await processVideo();
+}
+
+async function processVideo() {
     hideMsg();
 
     const ext = $('#extSelect').value;
@@ -879,7 +911,7 @@ async function handleDownload() {
     const progressPct = $('#progressPct');
     progressWrap.classList.add('show');
     progressBar.style.width = '10%';
-    progressText.textContent = 'Server is preparing your file\u2026';
+    progressText.textContent = 'Server is processing your video\u2026';
     progressPct.textContent = '';
     $('#downloadBtn').disabled = true;
 
@@ -893,7 +925,6 @@ async function handleDownload() {
     }, 800);
 
     try {
-        // Phase 1: Server downloads & prepares the file
         const res = await fetch('/api/download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -903,32 +934,78 @@ async function handleDownload() {
         if (!res.ok) throw new Error(data.detail || 'Download failed');
 
         clearInterval(progressInterval);
-        progressBar.style.width = '90%';
-        progressText.textContent = 'File ready! Starting download\u2026';
-        if (data.size) progressPct.textContent = formatBytes(data.size);
-
-        // Phase 2: Trigger native browser download via direct URL
-        // This works reliably on all browsers including mobile Safari/Chrome
-        const downloadUrl = `/api/download-file/${data.download_id}`;
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = data.filename || `download.${ext}`;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => a.remove(), 200);
-
         progressBar.style.width = '100%';
-        progressText.textContent = 'Download started!';
-        progressPct.textContent = '\u2713';
-        showMsg('Download started! Check your browser\u2019s downloads.', 'success');
+        progressText.textContent = 'File ready!';
+        progressPct.textContent = formatBytes(data.size);
+        
+        // Store download info for Phase 2
+        downloadInfo = data;
+        
+        // Transform button to "Download File" state
+        const btn = $('#downloadBtn');
+        btn.classList.add('ready');
+        btn.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            ⬇ Download File (${formatBytes(data.size)})
+        `;
+        btn.disabled = false;
+        
+        showMsg('File ready! Click "Download File" to save it to your device.', 'success');
     } catch (err) {
         clearInterval(progressInterval);
         showMsg(err.message);
+        $('#downloadBtn').disabled = false;
     } finally {
         setTimeout(() => progressWrap.classList.remove('show'), 3500);
-        $('#downloadBtn').disabled = false;
     }
+}
+
+function triggerBrowserDownload() {
+    if (!downloadInfo) return;
+    
+    // Phase 2: Trigger browser download
+    const downloadUrl = `/api/download-file/${downloadInfo.download_id}`;
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = downloadInfo.filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => a.remove(), 200);
+    
+    showMsg('Download started! Check your browser\u2019s downloads.', 'success');
+    
+    // Cleanup: Delete file from server and reset button
+    cleanupDownload();
+}
+
+async function cleanupDownload() {
+    if (!downloadInfo) return;
+    
+    try {
+        await fetch(`/api/download-file/${downloadInfo.download_id}`, {
+            method: 'DELETE',
+        });
+    } catch (err) {
+        console.warn('Cleanup failed:', err);
+    }
+    
+    // Reset state
+    downloadInfo = null;
+    const btn = $('#downloadBtn');
+    btn.classList.remove('ready');
+    btn.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Process Video
+    `;
 }
 
 // ── Keyboard ────────────────────────────────────────────
