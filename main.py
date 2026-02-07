@@ -242,12 +242,12 @@ def _base_opts() -> dict:
         "no_warnings": True,
         "noplaylist": True,
         "geo_bypass": True,
-        "socket_timeout": 30,
+        "socket_timeout": 20,
         "extract_flat": False,
         "user_agent": _USER_AGENT,
-        "retries": 10,
-        "fragment_retries": 10,
-        "extractor_retries": 5,
+        "retries": 3,
+        "fragment_retries": 3,
+        "extractor_retries": 2,
         "http_headers": {
             "User-Agent": _USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -315,19 +315,16 @@ def fetch_info(url: str) -> dict:
       1. Standard extraction (site-specific extractor)
       2. With browser impersonation (bypasses anti-bot)
       3. Force generic extractor (finds <video> tags, og:video, etc.)
-      4. Generic + browser impersonation
-      5. Last resort with relaxed format checks
     """
     errors_collected = []
 
-    for strategy_num in range(1, 6):
+    for strategy_num in range(1, 4):
         opts = _build_strategy_opts(strategy_num)
         if opts is None:
             continue  # strategy not available
 
         strategy_name = [
-            "", "standard", "impersonate", "generic",
-            "generic+impersonate", "relaxed"
+            "", "standard", "impersonate", "generic"
         ][strategy_num]
 
         try:
@@ -523,13 +520,12 @@ async def api_download(req: DownloadRequest, request: Request):
         else:
             opts["merge_output_format"] = "mp4"
 
-    # Try multiple download strategies (impersonate first since most sites need it)
+    # Try multiple download strategies (reduced to 3 for low computing power)
     download_error = None
     strategies = [
         {"impersonate": _CHROME_TARGET} if _IMPERSONATE_AVAILABLE else {},
         {},
         {"force_generic_extractor": True},
-        {"force_generic_extractor": True, "impersonate": _CHROME_TARGET} if _IMPERSONATE_AVAILABLE else None,
     ]
     for i, strategy in enumerate(strategies):
         if strategy is None:
@@ -608,12 +604,9 @@ async def api_download_file(download_id: str):
         safe_filename = f"{base}.{ext}"
 
     def iterfile():
-        try:
-            with open(filepath, "rb") as f:
-                while chunk := f.read(1024 * 256):  # 256KB chunks
-                    yield chunk
-        finally:
-            shutil.rmtree(dl_dir, ignore_errors=True)
+        with open(filepath, "rb") as f:
+            while chunk := f.read(1024 * 128):  # 128KB chunks
+                yield chunk
 
     headers = {
         "Content-Disposition": f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{quote(filename)}",
@@ -625,6 +618,20 @@ async def api_download_file(download_id: str):
 def _run_download(opts: dict, url: str):
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.download([url])
+
+
+@app.delete("/api/download-file/{download_id}")
+async def api_delete_download(download_id: str):
+    """Clean up a download file after user has downloaded it."""
+    if not re.match(r'^[a-f0-9]{12}$', download_id):
+        raise HTTPException(status_code=400, detail="Invalid download ID")
+
+    dl_dir = os.path.join(TEMP_DIR, download_id)
+    if os.path.exists(dl_dir):
+        shutil.rmtree(dl_dir, ignore_errors=True)
+        return {"status": "deleted"}
+    else:
+        return {"status": "not_found"}
 
 
 # ---------------------------------------------------------------------------
