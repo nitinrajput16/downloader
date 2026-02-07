@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#0b0d14" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>VidGrab — Download Videos from Any Website</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -468,13 +472,113 @@
         footer span { opacity: .5; }
 
         /* ── Responsive ───────────────────────────────────── */
-        @media (max-width: 600px) {
-            .search-card .input-row { flex-direction: column; }
-            .btn-fetch { width: 100%; justify-content: center; }
+        @media (max-width: 768px) {
+            .container { padding: 16px 16px 40px; }
+            header { margin: 24px 0 8px; }
             header .logo { font-size: 2rem; }
-            .controls-grid { grid-template-columns: 1fr; }
-            .steps { grid-template-columns: 1fr; }
-            .container { padding: 16px 14px 36px; }
+            header .subtitle { font-size: .85rem; padding: 0 8px; }
+
+            .sites-bar { margin: 14px 0 20px; }
+            .sites-scroll {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                justify-content: flex-start;
+                padding: 4px 0 10px;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+                gap: 8px;
+            }
+            .sites-scroll::-webkit-scrollbar { display: none; }
+            .site-chip { flex-shrink: 0; padding: 6px 14px; font-size: .75rem; }
+
+            .search-card { padding: 16px; }
+            .search-card .input-row { flex-direction: column; gap: 10px; }
+            .search-card input {
+                padding: 14px 16px;
+                font-size: 16px; /* Prevents iOS zoom on focus */
+                border-radius: 12px;
+            }
+            .btn-fetch {
+                width: 100%;
+                justify-content: center;
+                padding: 14px 24px;
+                min-height: 50px;
+                font-size: 1rem;
+                border-radius: 12px;
+            }
+            .search-hint { font-size: .74rem; margin-top: 8px; }
+
+            .video-card { margin-top: 16px; }
+            .card-body { padding: 16px !important; }
+            .card-body .video-title { font-size: 1rem; line-height: 1.4; }
+            .card-body .video-uploader { margin-bottom: 16px; }
+
+            .controls-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 14px; }
+            .control-group select {
+                padding: 13px 14px;
+                font-size: 16px; /* Prevents iOS zoom */
+                min-height: 50px;
+                border-radius: 12px;
+            }
+
+            .formats-table { max-height: 200px; }
+            .fmt-item {
+                padding: 13px 14px;
+                min-height: 48px;
+                gap: 12px;
+            }
+            .fmt-item input[type="radio"] { width: 18px; height: 18px; }
+            .fmt-label { font-size: .82rem; }
+            .fmt-size { font-size: .75rem; }
+
+            .btn-download {
+                padding: 16px;
+                min-height: 54px;
+                font-size: 1rem;
+                border-radius: 12px;
+            }
+
+            .progress-wrap { margin-top: 12px; padding: 14px 16px; }
+            .progress-bar-bg { height: 8px; }
+
+            .how-it-works { margin-top: 28px; }
+            .how-it-works h3 { font-size: .95rem; margin-bottom: 14px; }
+            .steps { grid-template-columns: 1fr; gap: 10px; }
+            .step { padding: 16px 14px; }
+            .step .step-icon { width: 40px; height: 40px; font-size: 1.1rem; }
+            .step .step-title { font-size: .83rem; }
+            .step .step-desc { font-size: .74rem; }
+
+            footer { padding: 20px 0 24px; font-size: .72rem; }
+
+            .platform-badge { top: 8px; left: 8px; padding: 4px 10px; font-size: .7rem; }
+            .duration-badge { bottom: 8px; right: 8px; padding: 3px 8px; font-size: .75rem; }
+
+            .message { padding: 12px 14px; font-size: .84rem; }
+            .spinner-wrap .spin-text { font-size: .84rem; }
+            .spinner-wrap .spin-sub { font-size: .74rem; }
+        }
+
+        @media (max-width: 380px) {
+            header .logo { font-size: 1.7rem; }
+            .container { padding: 12px 12px 36px; }
+            .search-card { padding: 12px; }
+            .card-body .video-title { font-size: .92rem; }
+            .btn-fetch { min-height: 48px; }
+            .btn-download { min-height: 50px; }
+        }
+
+        /* iOS safe area support */
+        @supports (padding-bottom: env(safe-area-inset-bottom)) {
+            body { padding-bottom: env(safe-area-inset-bottom); }
+            .container { padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
+        }
+
+        /* Touch feedback */
+        @media (hover: none) and (pointer: coarse) {
+            .btn-fetch:active, .btn-download:active { transform: scale(0.98); filter: brightness(0.95); }
+            .fmt-item:active { background: rgba(124,106,239,.12); }
+            .step:hover { transform: none; }
         }
     </style>
 </head>
@@ -774,65 +878,55 @@ async function handleDownload() {
     const progressText = $('#progressText');
     const progressPct = $('#progressPct');
     progressWrap.classList.add('show');
-    progressBar.style.width = '0%';
-    progressText.textContent = 'Starting download\u2026';
+    progressBar.style.width = '10%';
+    progressText.textContent = 'Server is preparing your file\u2026';
     progressPct.textContent = '';
     $('#downloadBtn').disabled = true;
 
+    // Animate progress bar while waiting
+    let fakeProgress = 10;
+    const progressInterval = setInterval(() => {
+        if (fakeProgress < 75) {
+            fakeProgress += Math.random() * 8;
+            progressBar.style.width = Math.min(75, fakeProgress) + '%';
+        }
+    }, 800);
+
     try {
+        // Phase 1: Server downloads & prepares the file
         const res = await fetch('/api/download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || 'Download failed');
-        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Download failed');
 
-        const contentLength = +res.headers.get('Content-Length') || 0;
-        const reader = res.body.getReader();
-        const chunks = [];
-        let received = 0;
+        clearInterval(progressInterval);
+        progressBar.style.width = '90%';
+        progressText.textContent = 'File ready! Starting download\u2026';
+        if (data.size) progressPct.textContent = formatBytes(data.size);
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            received += value.length;
-            if (contentLength) {
-                const pct = Math.min(100, Math.round((received / contentLength) * 100));
-                progressBar.style.width = pct + '%';
-                progressText.textContent = `${formatBytes(received)} / ${formatBytes(contentLength)}`;
-                progressPct.textContent = pct + '%';
-            } else {
-                progressBar.style.width = '60%';
-                progressText.textContent = `Downloaded ${formatBytes(received)}`;
-            }
-        }
-
-        progressBar.style.width = '100%';
-        progressText.textContent = 'Complete \u2014 saving file\u2026';
-        progressPct.textContent = '100%';
-
-        const cd = res.headers.get('Content-Disposition') || '';
-        const match = cd.match(/filename="?([^";]+)"?/);
-        const filename = match ? match[1] : `download.${ext}`;
-
-        const blob = new Blob(chunks);
+        // Phase 2: Trigger native browser download via direct URL
+        // This works reliably on all browsers including mobile Safari/Chrome
+        const downloadUrl = `/api/download-file/${data.download_id}`;
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
+        a.href = downloadUrl;
+        a.download = data.filename || `download.${ext}`;
+        a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
-        a.remove();
-        URL.revokeObjectURL(a.href);
+        setTimeout(() => a.remove(), 200);
 
-        showMsg('Download complete! File saved.', 'success');
+        progressBar.style.width = '100%';
+        progressText.textContent = 'Download started!';
+        progressPct.textContent = '\u2713';
+        showMsg('Download started! Check your browser\u2019s downloads.', 'success');
     } catch (err) {
+        clearInterval(progressInterval);
         showMsg(err.message);
     } finally {
-        setTimeout(() => progressWrap.classList.remove('show'), 2500);
+        setTimeout(() => progressWrap.classList.remove('show'), 3500);
         $('#downloadBtn').disabled = false;
     }
 }

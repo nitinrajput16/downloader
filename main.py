@@ -559,11 +559,53 @@ async def api_download(req: DownloadRequest, request: Request):
 
     filepath = os.path.join(dl_dir, files[0])
     filename = files[0]
+    file_size = os.path.getsize(filepath)
+
+    # Sanitize filename: keep only ASCII-safe chars to avoid latin-1 encoding errors
+    safe_filename = filename.encode("ascii", "ignore").decode("ascii")
+    safe_filename = re.sub(r'[^\w\s\-\.\(\)]', '_', safe_filename).strip() or f"download.{req.ext}"
+    if not safe_filename.endswith(f".{req.ext}"):
+        base = os.path.splitext(safe_filename)[0]
+        safe_filename = f"{base}.{req.ext}"
+
+    return {
+        "download_id": dl_id,
+        "filename": safe_filename,
+        "size": file_size,
+    }
+
+
+@app.get("/api/download-file/{download_id}")
+async def api_download_file(download_id: str):
+    """Serve a previously prepared download file via direct browser download."""
+    if not re.match(r'^[a-f0-9]{12}$', download_id):
+        raise HTTPException(status_code=400, detail="Invalid download ID")
+
+    dl_dir = os.path.join(TEMP_DIR, download_id)
+    if not os.path.exists(dl_dir):
+        raise HTTPException(status_code=404, detail="Download not found or expired")
+
+    files = os.listdir(dl_dir)
+    if not files:
+        shutil.rmtree(dl_dir, ignore_errors=True)
+        raise HTTPException(status_code=404, detail="Download file not found")
+
+    filepath = os.path.join(dl_dir, files[0])
+    filename = files[0]
+    ext = os.path.splitext(filename)[1].lstrip('.')
+
     media_type = {
         "mp4": "video/mp4",
         "webm": "video/webm",
         "mp3": "audio/mpeg",
-    }.get(req.ext, "application/octet-stream")
+    }.get(ext, "application/octet-stream")
+
+    file_size = os.path.getsize(filepath)
+    safe_filename = filename.encode("ascii", "ignore").decode("ascii")
+    safe_filename = re.sub(r'[^\w\s\-\.\(\)]', '_', safe_filename).strip() or f"download.{ext}"
+    if not safe_filename.endswith(f".{ext}"):
+        base = os.path.splitext(safe_filename)[0]
+        safe_filename = f"{base}.{ext}"
 
     def iterfile():
         try:
@@ -571,17 +613,8 @@ async def api_download(req: DownloadRequest, request: Request):
                 while chunk := f.read(1024 * 256):  # 256KB chunks
                     yield chunk
         finally:
-            # Cleanup temp files after streaming
             shutil.rmtree(dl_dir, ignore_errors=True)
 
-    file_size = os.path.getsize(filepath)
-    # Sanitize filename: keep only ASCII-safe chars to avoid latin-1 encoding errors
-    safe_filename = filename.encode("ascii", "ignore").decode("ascii")
-    safe_filename = re.sub(r'[^\w\s\-\.\(\)]', '_', safe_filename).strip() or f"download.{req.ext}"
-    # Ensure correct extension
-    if not safe_filename.endswith(f".{req.ext}"):
-        base = os.path.splitext(safe_filename)[0]
-        safe_filename = f"{base}.{req.ext}"
     headers = {
         "Content-Disposition": f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{quote(filename)}",
         "Content-Length": str(file_size),
@@ -592,6 +625,27 @@ async def api_download(req: DownloadRequest, request: Request):
 def _run_download(opts: dict, url: str):
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.download([url])
+
+
+# ---------------------------------------------------------------------------
+# Cleanup old temp files on startup
+# ---------------------------------------------------------------------------
+
+@app.on_event("startup")
+async def cleanup_old_downloads():
+    """Remove temp download dirs older than 10 minutes."""
+    import time
+    if os.path.exists(TEMP_DIR):
+        now = time.time()
+        for name in os.listdir(TEMP_DIR):
+            path = os.path.join(TEMP_DIR, name)
+            if os.path.isdir(path):
+                try:
+                    age = now - os.path.getmtime(path)
+                    if age > 600:  # 10 minutes
+                        shutil.rmtree(path, ignore_errors=True)
+                except Exception:
+                    pass
 
 
 # ---------------------------------------------------------------------------
