@@ -269,6 +269,14 @@ def _has_usable_formats(info: dict | None) -> bool:
 def _extract_error_message(exc: Exception) -> str:
     """Get a human-readable error string from yt-dlp exceptions."""
     msg = str(exc)
+    # Helpful mapping for common interactive / login-required errors
+    low = msg.lower()
+    if 'sign in to confirm' in low or 'sign in to confirm you' in low or 'confirm you\'re not a bot' in low:
+        return (
+            "Site requires login or interactive verification. "
+            "Provide browser cookies (export from your browser) or enable browser impersonation. "
+            "See: https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp"
+        )
     # yt-dlp DownloadError wraps the message with 'ERROR: ' prefix
     if msg.startswith("ERROR: "):
         msg = msg[7:]
